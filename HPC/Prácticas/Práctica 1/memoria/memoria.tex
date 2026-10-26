@@ -1,0 +1,518 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[most]{tcolorbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\floatname{algorithm}{Algoritmo}
+\algrenewcommand\algorithmicrequire{\textbf{Entrada:}}
+\algrenewcommand\algorithmicensure{\textbf{Salida:}}
+\algrenewcommand\algorithmicrepeat{\textbf{repetir}}
+\algrenewcommand\algorithmicuntil{\textbf{hasta que}}
+\algrenewcommand\algorithmicfor{\textbf{para}}
+\algrenewcommand\algorithmicdo{\textbf{hacer}}
+\algrenewcommand\algorithmicend{\textbf{fin}}
+\algrenewcommand\algorithmicreturn{\textbf{devolver}}
+\usepackage[hidelinks]{hyperref}
+
+% ---------- Datos del documento ----------
+\newcommand{\autor}{Javier Gómez López}
+\newcommand{\asignatura}{Computación de Altas Prestaciones}
+\newcommand{\titulo}{Práctica 1: Despliegue de un clúster Apache Spark}
+
+% ---------- Colores y estilos ----------
+\definecolor{upoverde}{RGB}{0,105,80}
+\definecolor{codigofondo}{RGB}{245,245,245}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codigofondo},
+  frame=single, rulecolor=\color{gray!40},
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false,
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1 {ñ}{{\~n}}1
+}
+
+\newtcolorbox{concepto}[1]{colback=upoverde!5, colframe=upoverde,
+  fonttitle=\bfseries, title={#1}, breakable}
+\newtcolorbox{aviso}{colback=orange!8, colframe=orange!80!black,
+  fonttitle=\bfseries, title={Ojo}, breakable}
+
+% Captura: muestra img/<fichero> si existe; si no, un recuadro para sustituir.
+\newcommand{\captura}[2]{%
+  \begin{figure}[htbp]\centering
+  \IfFileExists{img/#1}{\includegraphics[width=0.85\textwidth]{img/#1}}{%
+    \fbox{\parbox[c][5cm][c]{0.8\textwidth}{\centering\ttfamily img/#1}}}%
+  \caption{#2}\label{fig:#1}
+  \end{figure}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\asignatura}
+\fancyhead[R]{\small Práctica 1}
+\fancyfoot[C]{\thepage}
+
+\begin{document}
+
+% ======================= PORTADA =======================
+\begin{titlepage}
+  \centering
+  \IfFileExists{img/logo-upo.png}{\includegraphics[width=0.4\textwidth]{img/logo-upo.png}\par}{}
+  \vspace*{2cm}
+  {\Large Universidad Pablo de Olavide\par}
+  \vspace{0.3cm}
+  {\large Máster Universitario en Ingeniería Informática\par}
+  \vspace{2.5cm}
+  {\color{upoverde}\rule{\textwidth}{1.5pt}\par}
+  \vspace{0.5cm}
+  {\Huge\bfseries Despliegue de un clúster\\[0.2cm] Apache Spark\par}
+  \vspace{0.4cm}
+  {\Large \asignatura{} --- Práctica 1\par}
+  \vspace{0.3cm}
+  {\color{upoverde}\rule{\textwidth}{1.5pt}\par}
+  \vfill
+  \begin{tikzpicture}[node distance=1.2cm,
+      n/.style={draw=upoverde, fill=upoverde!10, rounded corners, minimum width=2.4cm, minimum height=0.9cm}]
+    \node[n] (m) {Master};
+    \node[n, below left=of m] (w1) {Worker};
+    \node[n, below right=of m] (w2) {Worker};
+    \draw[-{Stealth}, thick, upoverde] (m) -- (w1);
+    \draw[-{Stealth}, thick, upoverde] (m) -- (w2);
+  \end{tikzpicture}
+  \vfill
+  {\large \textbf{Autor:} \autor\par}
+  \vspace{0.3cm}
+  {\large Curso 2026--2027 · Modalidad online\par}
+  \vspace{0.3cm}
+  {\large \today\par}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ======================= INTRODUCCIÓN =======================
+\section{Introducción y objetivos}
+
+Cuando el volumen de datos crece hasta no caber (o no poder procesarse en un tiempo razonable) en una única máquina, la solución es \emph{repartir el trabajo} entre varias. Esa es la idea central de la computación distribuida, y Apache Spark es hoy uno de los motores más utilizados para hacerlo.
+
+En esta práctica se monta, desde cero, un pequeño clúster Spark de dos nodos (un \textbf{master} y un \textbf{worker}) sobre máquinas virtuales Linux, y se comprueba su funcionamiento ejecutando el algoritmo de \emph{clustering} K-Means incluido en los ejemplos de Spark, siguiendo el enunciado de la práctica.
+
+Los objetivos son:
+\begin{enumerate}
+  \item Introducirse en el manejo de datos masivos (\emph{Big Data}).
+  \item Comprender la arquitectura de un clúster Apache Spark y saber desplegarlo en modo \emph{Standalone}.
+\end{enumerate}
+
+El documento no se limita a enumerar comandos: en cada paso se explica \emph{qué} se hace y, sobre todo, \emph{por qué} es necesario.
+
+% ======================= CONCEPTOS =======================
+\section{Conceptos previos}
+
+\subsection{¿Qué es Apache Spark?}
+
+\begin{concepto}{Apache Spark}
+Motor de procesamiento distribuido de propósito general. Permite escribir un programa como si se ejecutara en una sola máquina, y Spark se encarga de dividir los datos en trozos (\emph{particiones}) y repartir el cómputo entre los nodos de un clúster.
+\end{concepto}
+
+Una de sus principales ventajas frente a su predecesor, Hadoop MapReduce, es que \textbf{puede} mantener datos en memoria para reutilizarlos entre operaciones, en lugar de leerlos y escribirlos en disco en cada paso. Conviene matizar esta idea:
+\begin{itemize}
+  \item Spark no guarda en memoria automáticamente todos los resultados intermedios. Por defecto, si un conjunto de datos se usa varias veces, se vuelve a calcular cada vez desde su origen.
+  \item Para reutilizarlo hay que pedirlo de forma explícita con \texttt{cache()} o \texttt{persist()}. Con \texttt{persist()} se elige el \emph{nivel de almacenamiento}: sólo memoria, memoria y disco, sólo disco, etc.~\cite{spark-rdd-guide}.
+  \item Spark utiliza tanto memoria como disco: cuando los datos no caben en memoria puede volcarlos a disco (\emph{spill}), y en las operaciones que redistribuyen datos entre nodos (\emph{shuffle}) escribe los resultados intermedios en el disco local de los nodos~\cite{spark-rdd-guide}.
+\end{itemize}
+Aun así, en algoritmos iterativos como K-Means, que recorren los mismos datos una y otra vez, poder conservarlos en memoria entre iteraciones supone una gran mejora de velocidad respecto a releerlos de disco en cada pasada.
+
+La abstracción básica de Spark es el \textbf{RDD} (\emph{Resilient Distributed Dataset}): una colección de elementos repartida entre los nodos, inmutable y capaz de reconstruirse si un nodo falla, porque Spark recuerda la secuencia de operaciones que la generó (su \emph{linaje})~\cite{spark-rdd-guide}.
+
+\subsection{Arquitectura de un clúster Spark}
+
+Un clúster Spark tiene varios papeles bien diferenciados (Figura~\ref{fig:arquitectura})~\cite{spark-cluster-overview}:
+
+\begin{description}[style=nextline]
+  \item[Driver] El proceso que ejecuta el programa principal (\texttt{main}) del usuario. Construye el plan de ejecución, lo divide en \emph{tareas} y las envía a los ejecutores. Se lanza con \texttt{spark-submit}.
+  \item[Cluster Manager (Master)] Lleva la cuenta de qué recursos (núcleos y memoria) hay disponibles en el clúster y los asigna a las aplicaciones. En esta práctica usamos el gestor propio de Spark, llamado \emph{Standalone}; existen alternativas como YARN o Kubernetes.
+  \item[Worker] Cada máquina que aporta recursos al clúster. Se registra en el master y, cuando éste se lo pide, lanza procesos \emph{executor}.
+  \item[Executor] Proceso JVM que vive en un worker, ejecuta las tareas que le manda el driver y, cuando se solicita con \texttt{cache()} o \texttt{persist()}, almacena (en memoria y/o disco) los datos que se quieren reutilizar.
+\end{description}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  box/.style={draw, rounded corners, align=center, minimum height=1cm, minimum width=2.8cm},
+  arr/.style={-{Stealth}, thick}]
+  \node[box, fill=blue!10] (driver) {Driver\\\small(\texttt{spark-submit})};
+  \node[box, fill=upoverde!15, right=3.5cm of driver] (master) {Master\\\small IP\_MASTER:7077};
+  \node[box, fill=orange!15, below=2cm of master] (worker) {Worker};
+  \node[box, fill=yellow!20, below=0.6cm of worker] (exec) {Executor\\\small tareas + caché};
+  \begin{scope}[on background layer]
+    \node[draw, dashed, fit=(worker)(exec), inner sep=8pt, label=right:{\small Nodo worker}] {};
+  \end{scope}
+  \draw[arr] (driver) -- node[above]{\small 1. pide recursos} (master);
+  \draw[arr] (master) -- node[right]{\small 2. lanza executor} (worker);
+  \draw[arr] (driver) |- node[pos=0.25, left]{\small 3. envía tareas} (exec);
+\end{tikzpicture}
+\caption{Arquitectura de un clúster Spark en modo Standalone.}
+\label{fig:arquitectura}
+\end{figure}
+
+El flujo es: el driver contacta con el master pidiendo recursos; el master ordena a los workers que arranquen executors; a partir de ahí el driver habla \emph{directamente} con los executors para enviarles tareas y recoger resultados.
+
+\subsection{Modo local frente a clúster}
+
+Spark puede ejecutarse en \textbf{modo local} (\texttt{--master local[*]}), donde driver y ejecutores viven en un único proceso de una sola máquina. Es útil para desarrollar y probar. En \textbf{modo clúster} (\texttt{--master spark://IP:7077}) el trabajo se reparte realmente entre máquinas, que es lo que se persigue en esta práctica.
+
+\subsection{Piezas de software necesarias}
+
+\begin{center}
+\begin{tabular}{@{}lp{10cm}@{}}
+\toprule
+\textbf{Componente} & \textbf{Por qué se necesita} \\
+\midrule
+JDK (Java) & Spark está escrito en Scala, que se compila a \emph{bytecode} de la JVM. Sin Java, Spark no arranca. \\
+Scala & Lenguaje nativo de Spark; necesario para compilar y ejecutar aplicaciones Scala propias. \\
+Spark 3.2.1 & El motor en sí. Se usa la distribución precompilada para Hadoop 3.2. \\
+OpenSSH & El master usa SSH para arrancar y parar los procesos remotos en los workers. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{El algoritmo K-Means}
+
+\begin{concepto}{K-Means}
+Algoritmo de aprendizaje no supervisado que agrupa $n$ puntos en $k$ grupos (\emph{clusters}), de forma que cada punto pertenece al grupo cuyo centro (\emph{centroide}) está más cerca.
+\end{concepto}
+
+\subsubsection*{Formulación}
+
+Se parte de un conjunto de $n$ puntos $x_1,\dots,x_n \in \mathbb{R}^d$ y de un número de grupos $k$ fijado de antemano. K-Means busca $k$ centroides $\mu_1,\dots,\mu_k$ y una asignación de cada punto a un grupo $C_1,\dots,C_k$ que minimicen la suma de las distancias al cuadrado de cada punto a su centroide:
+\[
+  J \;=\; \sum_{j=1}^{k} \sum_{x_i \in C_j} \lVert x_i - \mu_j \rVert^2 .
+\]
+Esta cantidad es precisamente el \emph{WSSSE} (\emph{Within Set Sum of Squared Errors}) que imprime el ejemplo de Spark al terminar: cuanto menor es, más compactos son los grupos.
+
+Encontrar el mínimo exacto de $J$ es un problema computacionalmente muy costoso, así que K-Means usa una estrategia iterativa que alterna dos pasos sencillos, cada uno de los cuales nunca empeora $J$:
+
+\begin{algorithm}[htbp]
+\caption{K-Means}\label{alg:kmeans}
+\begin{algorithmic}[1]
+\Require puntos $x_1,\dots,x_n$; número de grupos $k$; tolerancia $\varepsilon$
+\Ensure centroides $\mu_1,\dots,\mu_k$ y asignación de cada punto a un grupo
+\State Elegir $k$ centroides iniciales $\mu_1,\dots,\mu_k$
+\Repeat
+  \For{cada punto $x_i$} \Comment{Paso de asignación}
+    \State $c_i \gets \arg\min_{j} \lVert x_i - \mu_j \rVert^2$
+  \EndFor
+  \For{cada grupo $j = 1,\dots,k$} \Comment{Paso de actualización}
+    \State $\mu_j \gets \dfrac{1}{|C_j|} \displaystyle\sum_{x_i \in C_j} x_i$
+  \EndFor
+\Until{ningún centroide se desplaza más de $\varepsilon$ (o se alcanza un máximo de iteraciones)}
+\State \Return $\mu_1,\dots,\mu_k$ y $c_1,\dots,c_n$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{itemize}
+  \item \textbf{Asignación:} con los centroides fijos, lo mejor que puede hacer cada punto es irse con el más cercano.
+  \item \textbf{Actualización:} con los grupos fijos, el punto que minimiza la suma de distancias al cuadrado a los miembros de un grupo es su media. Por eso el centroide se recalcula como la media.
+  \item \textbf{Convergencia:} como $J$ nunca aumenta y el número de asignaciones posibles es finito, el algoritmo siempre termina. Eso sí, llega a un \emph{mínimo local}: el resultado depende de los centroides iniciales. Por eso es importante una buena inicialización.
+  \item \textbf{Coste:} cada iteración calcula la distancia de cada punto a cada centroide, es decir, $O(n \cdot k \cdot d)$ operaciones. Con millones de puntos, repartir este cálculo entre varias máquinas es lo que justifica usar Spark.
+\end{itemize}
+
+\subsubsection*{Ejemplo paso a paso}
+
+Para verlo con números, tomamos seis puntos en el plano y $k=2$:
+\[
+A=(1,1),\quad B=(2,1),\quad C=(1,2),\quad D=(5,4),\quad E=(6,5),\quad F=(5,5).
+\]
+A simple vista hay dos grupos: $\{A,B,C\}$ abajo a la izquierda y $\{D,E,F\}$ arriba a la derecha. Para que se vea cómo el algoritmo corrige una mala elección inicial, empezamos con dos centroides muy cerca uno del otro: $\mu_1 = A = (1,1)$ y $\mu_2 = B = (2,1)$.
+
+\paragraph{Iteración 1.} Se calcula la distancia al cuadrado de cada punto a los dos centroides (no hace falta la raíz cuadrada para saber cuál está más cerca):
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Punto} & $\lVert x - \mu_1 \rVert^2$ & $\lVert x - \mu_2 \rVert^2$ & \textbf{Grupo} \\
+\midrule
+$A=(1,1)$ & $0$  & $1$  & 1 \\
+$B=(2,1)$ & $1$  & $0$  & 2 \\
+$C=(1,2)$ & $1$  & $2$  & 1 \\
+$D=(5,4)$ & $25$ & $18$ & 2 \\
+$E=(6,5)$ & $41$ & $32$ & 2 \\
+$F=(5,5)$ & $32$ & $25$ & 2 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Se actualizan los centroides con la media de cada grupo:
+\[
+\mu_1 = \tfrac{A+C}{2} = (1,\ 1.5), \qquad
+\mu_2 = \tfrac{B+D+E+F}{4} = \left(\tfrac{18}{4},\ \tfrac{15}{4}\right) = (4.5,\ 3.75).
+\]
+El centroide 2 ha dado un gran salto hacia el grupo de arriba, pero todavía arrastra al punto $B$.
+
+\paragraph{Iteración 2.} Con los nuevos centroides, $B$ queda ahora a distancia al cuadrado $1.25$ de $\mu_1$ y $13.81$ de $\mu_2$, así que cambia al grupo 1. El resto de puntos no cambia. Los grupos son ya $\{A,B,C\}$ y $\{D,E,F\}$, y los centroides pasan a ser:
+\[
+\mu_1 = \tfrac{A+B+C}{3} = \left(\tfrac{4}{3},\ \tfrac{4}{3}\right) \approx (1.33,\ 1.33), \qquad
+\mu_2 = \tfrac{D+E+F}{3} = \left(\tfrac{16}{3},\ \tfrac{14}{3}\right) \approx (5.33,\ 4.67).
+\]
+
+\paragraph{Iteración 3.} Al repetir la asignación, ningún punto cambia de grupo, por lo que los centroides tampoco se mueven: el algoritmo ha \textbf{convergido}. El valor final es $J = \tfrac{4}{3} + \tfrac{4}{3} = \tfrac{8}{3} \approx 2.67$, frente a $J = 0.5 + 19.75 = 20.25$ tras la primera iteración.
+
+La Figura~\ref{fig:kmeans-ejemplo} muestra la evolución gráficamente.
+
+\begin{figure}[htbp]
+\centering
+\newcommand{\kmpanel}[5]{% #1 titulo, #2 color B, #3 mu1, #4 mu2, #5 color D/E/F
+\begin{tikzpicture}[scale=0.62]
+  \draw[step=1, gray!20, very thin] (0,0) grid (7,6);
+  \draw[-{Stealth}] (0,0) -- (7.3,0);
+  \draw[-{Stealth}] (0,0) -- (0,6.3);
+  \foreach \x in {1,...,6} \node[below, font=\tiny] at (\x,0) {\x};
+  \foreach \y in {1,...,5} \node[left, font=\tiny] at (0,\y) {\y};
+  \fill[blue!70] (1,1) circle (4pt) node[below left, font=\scriptsize, black] {A};
+  \fill[blue!70] (1,2) circle (4pt) node[above left, font=\scriptsize, black] {C};
+  \fill[#2] (2,1) circle (4pt) node[below right, font=\scriptsize, black] {B};
+  \fill[#5] (5,4) circle (4pt) node[below right, font=\scriptsize, black] {D};
+  \fill[#5] (6,5) circle (4pt) node[above right, font=\scriptsize, black] {E};
+  \fill[#5] (5,5) circle (4pt) node[above left, font=\scriptsize, black] {F};
+  \node[blue!80!black, font=\Large] at #3 {$\times$};
+  \node[red!80!black, font=\Large] at #4 {$\times$};
+  \node[font=\small] at (3.5,-1.2) {#1};
+\end{tikzpicture}}
+\kmpanel{(a) Inicio}{red!70}{(1,1)}{(2,1)}{gray!60}\hfill
+\kmpanel{(b) Tras la iteración 1}{red!70}{(1,1.5)}{(4.5,3.75)}{red!70}\hfill
+\kmpanel{(c) Convergencia}{blue!70}{(1.33,1.33)}{(5.33,4.67)}{red!70}
+\caption{Evolución de K-Means con $k=2$. Las cruces son los centroides ($\mu_1$ en azul, $\mu_2$ en rojo) y el color de cada punto indica el grupo asignado. En (a) los puntos $D$, $E$, $F$ aún no tienen grupo; en (b) $B$ sigue asignado al grupo rojo; en (c) los grupos ya coinciden con los dos conjuntos naturales.}
+\label{fig:kmeans-ejemplo}
+\end{figure}
+
+\subsubsection*{K-Means en Spark}
+
+El paso de asignación es \emph{embarazosamente paralelo}: cada punto se procesa de forma independiente, así que Spark puede repartir los puntos entre los executors. Sólo la actualización requiere juntar resultados parciales: cada executor calcula, para cada grupo, la suma y el número de sus puntos asignados, y basta con combinar esas sumas parciales para obtener las medias. Como los mismos datos se recorren en cada iteración, éste es un caso típico en el que conviene mantenerlos en memoria con \texttt{cache()}. Por eso es un buen ejemplo para probar un clúster. La implementación de Spark MLlib, además, elige los centroides iniciales con una variante paralela de K-Means++ llamada K-Means$\|$~\cite{spark-mllib-clustering}.
+
+% ======================= INSTALACIÓN =======================
+\section{Instalación del software}
+
+Se parte de una máquina virtual Linux (Ubuntu/Mint) limpia. Todo este apartado se realiza \textbf{sólo en la máquina que será el master}; el worker se obtendrá después clonándola, con lo que heredará todo lo instalado.
+
+\subsection{Java (JDK)}
+\begin{lstlisting}[language=bash]
+sudo apt update
+sudo apt upgrade
+sudo apt install default-jdk
+\end{lstlisting}
+\texttt{apt update} refresca la lista de paquetes disponibles, \texttt{apt upgrade} actualiza los ya instalados y \texttt{default-jdk} instala el JDK por defecto de la distribución. Puede comprobarse con \texttt{java -version}.
+
+\subsection{Scala}
+\begin{lstlisting}[language=bash]
+sudo apt-get install scala
+\end{lstlisting}
+
+\subsection{Spark}
+Se descarga la versión 3.2.1 precompilada, se descomprime y se mueve a \texttt{/opt}, que es el directorio convencional en Linux para software instalado manualmente:
+\begin{lstlisting}[language=bash]
+wget https://archive.apache.org/dist/spark/spark-3.2.1/spark-3.2.1-bin-hadoop3.2.tgz
+tar -xvf spark-3.2.1-bin-hadoop3.2.tgz
+sudo mv spark-3.2.1-bin-hadoop3.2 /opt/spark
+sudo chown -R $USER /opt/spark
+\end{lstlisting}
+El último comando cambia el propietario de la carpeta a nuestro usuario. Es importante porque Spark escribe \emph{logs} y ficheros de trabajo dentro de su directorio, y sin permisos de escritura fallaría al arrancar.
+
+\subsection{Servidor SSH}
+\begin{lstlisting}[language=bash]
+sudo apt install openssh-server
+\end{lstlisting}
+Los scripts de arranque del clúster se conectan por SSH a cada worker para lanzar allí el proceso correspondiente, por lo que cada nodo debe aceptar conexiones SSH.
+
+\subsection{Variables de entorno}
+Se añaden al final de \texttt{\textasciitilde/.bashrc} (fichero que se ejecuta al abrir cada terminal):
+\begin{lstlisting}[language=bash]
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+export SPARK_HOME=/opt/spark
+export PATH=$PATH:$SPARK_HOME/bin:$SPARK_HOME/sbin
+\end{lstlisting}
+y se recargan con \texttt{source \textasciitilde/.bashrc}.
+
+\begin{itemize}
+  \item \texttt{JAVA\_HOME} indica a Spark dónde está la instalación de Java.
+  \item \texttt{SPARK\_HOME} indica dónde está Spark.
+  \item Añadir \texttt{bin} y \texttt{sbin} al \texttt{PATH} permite ejecutar \texttt{spark-submit}, \texttt{start-all.sh}, etc.\ desde cualquier directorio.
+\end{itemize}
+
+\begin{aviso}
+La ruta de \texttt{JAVA\_HOME} depende de la versión de Java instalada. Si \texttt{default-jdk} instaló otra versión (p.\,ej.\ la 17 o la 21), hay que ajustarla. Puede consultarse con \texttt{ls /usr/lib/jvm/}.
+\end{aviso}
+
+\subsection{Clonación de la máquina virtual}
+Con la máquina apagada, se clona en VirtualBox mediante una \textbf{clonación enlazada} (\emph{linked clone}). La original se llamará \texttt{master} y la copia \texttt{worker}.
+
+Una clonación enlazada no duplica el disco completo, sino que guarda sólo las diferencias respecto a la original: es casi instantánea y ocupa muy poco. Como resultado, ambas máquinas tienen exactamente el mismo software y la misma configuración, que es justo lo que Spark necesita (mismas rutas y mismas versiones en todos los nodos).
+
+\begin{aviso}
+Al clonar, conviene elegir \emph{generar nuevas direcciones MAC} para todas las interfaces de red; si no, ambas máquinas podrían recibir la misma IP. Además, ambas deben estar en la misma red (p.\,ej.\ adaptador puente o red NAT de VirtualBox) para poder verse. Las IP de cada máquina se obtienen con \texttt{ip a} o \texttt{hostname -I}.
+\end{aviso}
+
+% ======================= MONTAJE =======================
+\section{Montaje del clúster}
+
+\subsection{Intercambio de claves SSH}
+
+Como se ha dicho, el master arranca los procesos de los workers por SSH. Si cada conexión pidiera contraseña, el arranque automático sería imposible. La solución es la \textbf{autenticación por clave pública}.
+
+\begin{concepto}{Autenticación SSH por clave pública}
+Se genera una pareja de claves: una \textbf{privada}, que nunca sale de la máquina, y una \textbf{pública}, que se copia en las máquinas a las que queremos acceder. Al conectar, el servidor comprueba que el cliente posee la clave privada correspondiente sin que ésta viaje por la red, y permite el acceso sin pedir contraseña.
+\end{concepto}
+
+Desde el master:
+\begin{lstlisting}[language=bash]
+ssh-keygen          # aceptar los valores por defecto
+ssh-copy-id -i ~/.ssh/id_rsa.pub usuarioWorker@IP_WORKER
+ssh-copy-id -i ~/.ssh/id_rsa.pub usuarioMaster@IP_MASTER
+\end{lstlisting}
+
+\texttt{ssh-keygen} crea \texttt{\textasciitilde/.ssh/id\_rsa} (privada) e \texttt{id\_rsa.pub} (pública). \texttt{ssh-copy-id} añade la clave pública al fichero \texttt{\textasciitilde/.ssh/authorized\_keys} del destino. Se copia también al propio master porque los scripts de arranque se conectan a él mismo por SSH para lanzar su parte. Puede comprobarse con \texttt{ssh usuarioWorker@IP\_WORKER}: debe entrar sin pedir contraseña.
+
+\subsection{Configuración de Spark}
+
+Spark necesita saber dos cosas: \emph{quién es el master} y \emph{quiénes son los workers}. Ambas se configuran en \texttt{/opt/spark/conf}, en los dos nodos:
+
+\begin{lstlisting}[language=bash]
+cd /opt/spark/conf/
+nano slaves
+cp spark-env.sh.template spark-env.sh
+nano spark-env.sh
+\end{lstlisting}
+
+\paragraph{Fichero \texttt{slaves}.} Lista, una por línea, las máquinas en las que se arrancará un worker:
+\begin{lstlisting}
+# A Spark Worker will be started on each of the machines listed below.
+# localhost
+IP_WORKER
+\end{lstlisting}
+
+\begin{aviso}
+En la documentación oficial de Spark 3.2.1 este fichero se llama \texttt{conf/workers}~\cite{spark-standalone}; \texttt{slaves} es el nombre que se usaba en versiones anteriores de Spark. Si el worker no arrancase, basta con crear el fichero como \texttt{workers} con el mismo contenido.
+\end{aviso}
+
+\paragraph{Fichero \texttt{spark-env.sh}.} Variables que leen los scripts al arrancar cada proceso:
+\begin{lstlisting}[language=bash]
+export SPARK_MASTER_HOST=IP_MASTER
+export SPARK_WORKER_CORES=1
+export SPARK_WORKER_MEMORY=1g
+\end{lstlisting}
+
+\begin{itemize}
+  \item \texttt{SPARK\_MASTER\_HOST}: IP en la que escucha el master. Si no se fija, podría escuchar sólo en \texttt{localhost} y el worker no podría conectarse.
+  \item \texttt{SPARK\_WORKER\_CORES}: núcleos que cada worker \emph{ofrece} al clúster.
+  \item \texttt{SPARK\_WORKER\_MEMORY}: memoria que cada worker ofrece para sus executors.
+\end{itemize}
+Estos valores no tienen por qué coincidir con el hardware real: son los recursos que el worker pone a disposición del master para repartir. Aquí se limitan a 1 núcleo y 1\,GB porque las máquinas virtuales tienen pocos recursos.
+
+\subsection{Arranque del clúster}
+
+Desde el master:
+\begin{lstlisting}[language=bash]
+cd /opt/spark/sbin/
+./start-all.sh
+\end{lstlisting}
+
+\texttt{start-all.sh} es un atajo que llama a dos scripts~\cite{spark-standalone}:
+\begin{enumerate}
+  \item \texttt{start-master.sh}: arranca el proceso master en la máquina local, que queda escuchando en el puerto \textbf{7077} (para aplicaciones y workers) y sirve una interfaz web en el puerto \textbf{8080}.
+  \item \texttt{start-workers.sh}: lee el fichero de workers y, por SSH, arranca un proceso worker en cada máquina listada, indicándole la dirección del master para que se registre.
+\end{enumerate}
+Para detener el clúster se usa el script simétrico \texttt{stop-all.sh}.
+
+Puede verificarse con el comando \texttt{jps} (lista los procesos Java en ejecución): en el master debe aparecer \texttt{Master} y en el worker, \texttt{Worker}. También es visible desde el monitor del sistema del worker (Figura~\ref{fig:procesos.png}).
+
+\captura{procesos.png}{Procesos Java del clúster en ejecución en el nodo worker.}
+
+% ======================= EXPLOTACIÓN =======================
+\section{Explotación del clúster}
+
+\subsection{Interfaz web del master}
+
+Accediendo desde el navegador a \texttt{http://IP\_MASTER:8080} se obtiene el panel de control del clúster (Figura~\ref{fig:webui.png}). En él se puede ver:
+\begin{itemize}
+  \item La URL del clúster, \texttt{spark://IP\_MASTER:7077}, que es la dirección a la que se envían las aplicaciones.
+  \item La tabla de \textbf{workers} registrados, con su identificador, dirección, estado (\texttt{ALIVE}) y recursos ofrecidos.
+  \item Las aplicaciones en ejecución y las ya finalizadas.
+\end{itemize}
+Que el worker aparezca en esta tabla con estado \texttt{ALIVE} confirma que el montaje es correcto: se ha registrado en el master a través de la red.
+
+\captura{webui.png}{Interfaz web de Apache Spark en el master, con el worker registrado.}
+
+\subsection{Ejecución de K-Means en el clúster}
+
+Spark incluye una serie de aplicaciones de ejemplo empaquetadas en un \texttt{.jar}. Se lanza la de K-Means desde el master:
+\begin{lstlisting}[language=bash]
+cd /opt/spark
+./bin/spark-submit \
+  --master spark://IP_MASTER:7077 \
+  --class org.apache.spark.examples.mllib.KMeansExample \
+  examples/jars/spark-examples_2.12-3.2.1.jar
+\end{lstlisting}
+
+\begin{itemize}
+  \item \texttt{spark-submit} es la herramienta estándar para enviar aplicaciones a Spark. Arranca el \emph{driver} en la máquina desde la que se ejecuta~\cite{spark-submitting}.
+  \item \texttt{--master} indica a qué clúster enviarla. Cambiando este valor por \texttt{local[*]} la misma aplicación se ejecutaría en modo local, sin tocar el código.
+  \item \texttt{--class} indica la clase que contiene el método \texttt{main}.
+  \item El último argumento es el \texttt{.jar} con el código compilado. El sufijo \texttt{\_2.12} indica que se compiló con Scala 2.12.
+\end{itemize}
+
+Este ejemplo lee el fichero \texttt{data/mllib/kmeans\_data.txt}, que contiene unos pocos puntos en 3 dimensiones, entrena un modelo K-Means con $k=2$ y muestra el error del agrupamiento (\emph{WSSSE}, suma de los cuadrados de las distancias de cada punto a su centroide).
+
+\begin{aviso}
+La ruta del fichero de datos es local. Funciona porque el worker es un clon del master y tiene el mismo fichero en la misma ruta. En un clúster real se usaría un sistema de ficheros compartido como HDFS, que es justamente el contenido de la segunda parte de la práctica.
+\end{aviso}
+
+Mientras la aplicación se ejecuta, aparece en la interfaz web con su nombre, núcleos asignados, memoria por nodo, usuario y tiempo de ejecución (Figura~\ref{fig:app-running.png}). Pulsando sobre el worker se ven los executors que está ejecutando para la aplicación (Figura~\ref{fig:worker-detalle.png}).
+
+\captura{app-running.png}{Aplicación K-Means ejecutándose sobre el clúster.}
+\captura{worker-detalle.png}{Detalle de ejecución en el worker.}
+
+Al terminar, la aplicación pasa a la lista de \emph{Completed Applications} (Figura~\ref{fig:app-finalizada.png}).
+
+\captura{app-finalizada.png}{Aplicación ya finalizada en la interfaz web.}
+
+% ======================= CONCLUSIONES =======================
+\section{Conclusiones}
+
+En esta práctica se ha desplegado un clúster Apache Spark en modo Standalone formado por un master y un worker, y se ha verificado su funcionamiento ejecutando un algoritmo de aprendizaje automático distribuido.
+
+Las ideas principales que deja son:
+\begin{itemize}
+  \item Un clúster Spark separa claramente quién \emph{gestiona} los recursos (master), quién los \emph{aporta} (workers) y quién \emph{dirige} el cómputo (driver).
+  \item El despliegue se apoya en herramientas estándar de Linux: SSH sin contraseña para el control remoto de los nodos y variables de entorno para la configuración.
+  \item Todos los nodos deben tener el mismo software en las mismas rutas; clonar máquinas virtuales es una forma sencilla de conseguirlo.
+  \item El mismo programa puede ejecutarse en local o en un clúster cambiando sólo el parámetro \texttt{--master}: Spark oculta la complejidad de la distribución.
+  \item El acceso a los datos es el siguiente cuello de botella: para que todos los nodos lean los mismos datos hace falta un sistema de ficheros distribuido como HDFS.
+\end{itemize}
+
+% ======================= USO DE IA =======================
+\section*{Declaración de uso de inteligencia artificial}
+\addcontentsline{toc}{section}{Declaración de uso de inteligencia artificial}
+
+Para la elaboración de este documento se ha utilizado una herramienta de inteligencia artificial generativa (Claude, de Anthropic). La IA se ha empleado para redactar las explicaciones de los conceptos, estructurar la memoria y generar el código \LaTeX{} y los diagramas. El contenido ha sido revisado por el autor, y el despliegue del clúster, las capturas de pantalla y el vídeo de funcionamiento corresponden a la realización práctica llevada a cabo por el autor.
+
+La IA se ha utilizado únicamente como herramienta de apoyo. El alumno ha revisado, contrastado y validado todo el contenido, y asume la \textbf{plena responsabilidad} sobre el documento: sobre la exactitud técnica de las explicaciones, la corrección de los comandos y configuraciones descritos, la idoneidad de las fuentes citadas y el cumplimiento de la normativa académica de la Universidad Pablo de Olavide. Cualquier error u omisión que pueda contener es responsabilidad exclusiva del autor.
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{Referencias}
+\bibliographystyle{unsrt-es}
+\bibliography{bibliografia}
+
+\end{document}
