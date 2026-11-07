@@ -52,11 +52,13 @@
   fonttitle=\bfseries, title={Ojo}, breakable}
 
 % Captura: muestra img/<fichero> si existe; si no, un recuadro para sustituir.
-\newcommand{\captura}[2]{%
+% \captura[opciones de includegraphics]{fichero}{pie}
+% Por defecto: como mucho el 80 % del ancho y el 40 % del alto de la página.
+\newcommand{\captura}[3][width=0.8\textwidth,height=0.4\textheight,keepaspectratio]{%
   \begin{figure}[htbp]\centering
-  \IfFileExists{img/#1}{\includegraphics[width=0.85\textwidth]{img/#1}}{%
-    \fbox{\parbox[c][5cm][c]{0.8\textwidth}{\centering\ttfamily img/#1}}}%
-  \caption{#2}\label{fig:#1}
+  \IfFileExists{img/#2}{\includegraphics[#1]{img/#2}}{%
+    \fbox{\parbox[c][5cm][c]{0.8\textwidth}{\centering\ttfamily img/#2}}}%
+  \caption{#3}\label{fig:#2}
   \end{figure}}
 
 \pagestyle{fancy}
@@ -116,7 +118,6 @@ Los objetivos son:
   \item Comprender la arquitectura de un clúster Apache Spark y saber desplegarlo en modo \emph{Standalone}.
 \end{enumerate}
 
-El documento no se limita a enumerar comandos: en cada paso se explica \emph{qué} se hace y, sobre todo, \emph{por qué} es necesario.
 
 % ======================= CONCEPTOS =======================
 \section{Conceptos previos}
@@ -311,9 +312,13 @@ Se parte de una máquina virtual Linux (Ubuntu/Mint) limpia. Todo este apartado 
 \begin{lstlisting}[language=bash]
 sudo apt update
 sudo apt upgrade
-sudo apt install default-jdk
+sudo apt install openjdk-11-jdk
 \end{lstlisting}
-\texttt{apt update} refresca la lista de paquetes disponibles, \texttt{apt upgrade} actualiza los ya instalados y \texttt{default-jdk} instala el JDK por defecto de la distribución. Puede comprobarse con \texttt{java -version}.
+\texttt{apt update} refresca la lista de paquetes disponibles, \texttt{apt upgrade} actualiza los ya instalados y \texttt{openjdk-11-jdk} instala el JDK 11. Puede comprobarse con \texttt{java -version}.
+
+\begin{aviso}
+Spark 3.2.1 sólo es compatible con Java 8 y 11~\cite{spark-overview}, por lo que se instala explícitamente el JDK 11 en lugar de \texttt{default-jdk}. Véase el apartado~\ref{sec:problema-java}.
+\end{aviso}
 
 \subsection{Scala}
 \begin{lstlisting}[language=bash]
@@ -352,7 +357,7 @@ y se recargan con \texttt{source \textasciitilde/.bashrc}.
 \end{itemize}
 
 \begin{aviso}
-La ruta de \texttt{JAVA\_HOME} depende de la versión de Java instalada. Si \texttt{default-jdk} instaló otra versión (p.\,ej.\ la 17 o la 21), hay que ajustarla. Puede consultarse con \texttt{ls /usr/lib/jvm/}.
+La ruta de \texttt{JAVA\_HOME} depende de la arquitectura de la máquina: en x86-64 es \texttt{java-11-openjdk-amd64} y en ARM (p.\,ej.\ máquinas virtuales en un Mac con Apple Silicon) es \texttt{java-11-openjdk-arm64}. Puede consultarse con \texttt{ls /usr/lib/jvm/}.
 \end{aviso}
 
 \subsection{Clonación de la máquina virtual}
@@ -384,18 +389,24 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub usuarioMaster@IP_MASTER
 
 \texttt{ssh-keygen} crea \texttt{\textasciitilde/.ssh/id\_rsa} (privada) e \texttt{id\_rsa.pub} (pública). \texttt{ssh-copy-id} añade la clave pública al fichero \texttt{\textasciitilde/.ssh/authorized\_keys} del destino. Se copia también al propio master porque los scripts de arranque se conectan a él mismo por SSH para lanzar su parte. Puede comprobarse con \texttt{ssh usuarioWorker@IP\_WORKER}: debe entrar sin pedir contraseña.
 
+Si el usuario del worker es distinto del del master, hay que indicárselo a SSH en el fichero \texttt{\textasciitilde/.ssh/config} del master (véase el apartado~\ref{sec:problema-worker}):
+\begin{lstlisting}
+Host IP_WORKER
+  User usuarioWorker
+\end{lstlisting}
+
 \subsection{Configuración de Spark}
 
 Spark necesita saber dos cosas: \emph{quién es el master} y \emph{quiénes son los workers}. Ambas se configuran en \texttt{/opt/spark/conf}, en los dos nodos:
 
 \begin{lstlisting}[language=bash]
 cd /opt/spark/conf/
-nano slaves
+nano workers
 cp spark-env.sh.template spark-env.sh
 nano spark-env.sh
 \end{lstlisting}
 
-\paragraph{Fichero \texttt{slaves}.} Lista, una por línea, las máquinas en las que se arrancará un worker:
+\paragraph{Fichero \texttt{workers}.} Lista, una por línea, las máquinas en las que se arrancará un worker:
 \begin{lstlisting}
 # A Spark Worker will be started on each of the machines listed below.
 # localhost
@@ -403,17 +414,19 @@ IP_WORKER
 \end{lstlisting}
 
 \begin{aviso}
-En la documentación oficial de Spark 3.2.1 este fichero se llama \texttt{conf/workers}~\cite{spark-standalone}; \texttt{slaves} es el nombre que se usaba en versiones anteriores de Spark. Si el worker no arrancase, basta con crear el fichero como \texttt{workers} con el mismo contenido.
+El enunciado llama a este fichero \texttt{slaves}, pero en Spark 3.2.1 el script de arranque lee \texttt{conf/workers}~\cite{spark-standalone}. Véase el apartado~\ref{sec:problema-worker}.
 \end{aviso}
 
 \paragraph{Fichero \texttt{spark-env.sh}.} Variables que leen los scripts al arrancar cada proceso:
 \begin{lstlisting}[language=bash]
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
 export SPARK_MASTER_HOST=IP_MASTER
 export SPARK_WORKER_CORES=1
 export SPARK_WORKER_MEMORY=1g
 \end{lstlisting}
 
 \begin{itemize}
+  \item \texttt{JAVA\_HOME}: se repite aquí porque el worker se lanza por SSH en una shell que no lee \texttt{\textasciitilde/.bashrc} (apartado~\ref{sec:problema-worker}).
   \item \texttt{SPARK\_MASTER\_HOST}: IP en la que escucha el master. Si no se fija, podría escuchar sólo en \texttt{localhost} y el worker no podría conectarse.
   \item \texttt{SPARK\_WORKER\_CORES}: núcleos que cada worker \emph{ofrece} al clúster.
   \item \texttt{SPARK\_WORKER\_MEMORY}: memoria que cada worker ofrece para sus executors.
@@ -435,9 +448,16 @@ cd /opt/spark/sbin/
 \end{enumerate}
 Para detener el clúster se usa el script simétrico \texttt{stop-all.sh}.
 
-Puede verificarse con el comando \texttt{jps} (lista los procesos Java en ejecución): en el master debe aparecer \texttt{Master} y en el worker, \texttt{Worker}. También es visible desde el monitor del sistema del worker (Figura~\ref{fig:procesos.png}).
+Puede verificarse con el comando \texttt{jps} (lista los procesos Java en ejecución): en el master debe aparecer \texttt{Master} (Figura~\ref{fig:jps-master.png}) y en el worker, \texttt{Worker} (Figura~\ref{fig:jps-worker.png}). En ambos casos aparece también \texttt{Jps}, que es el propio proceso del comando.
 
-\captura{procesos.png}{Procesos Java del clúster en ejecución en el nodo worker.}
+% Se recorta la parte inferior de las terminales, que está vacía.
+\captura[width=0.75\textwidth,trim=0 252bp 0 0,clip]{jps-master.png}{Salida de \texttt{jps} en el nodo master: proceso \texttt{Master} en ejecución.}
+\captura[width=0.75\textwidth,trim=0 114bp 0 0,clip]{jps-worker.png}{Salida de \texttt{jps} en el nodo worker: proceso \texttt{Worker} en ejecución.}
+
+También es visible desde el monitor del sistema del worker (Figura~\ref{fig:procesos.png}).
+
+% Se recorta a la lista de procesos, donde aparece la fila de java.
+\captura[width=0.85\textwidth,trim=235bp 566bp 138bp 20bp,clip]{procesos.png}{Proceso Java del worker visto desde el monitor del sistema.}
 
 % ======================= EXPLOTACIÓN =======================
 \section{Explotación del clúster}
@@ -486,6 +506,74 @@ Mientras la aplicación se ejecuta, aparece en la interfaz web con su nombre, n�
 Al terminar, la aplicación pasa a la lista de \emph{Completed Applications} (Figura~\ref{fig:app-finalizada.png}).
 
 \captura{app-finalizada.png}{Aplicación ya finalizada en la interfaz web.}
+
+% ======================= PROBLEMAS =======================
+\section{Problemas encontrados durante la realización de la práctica}
+\label{sec:problemas}
+
+Seguir los pasos del enunciado al pie de la letra no fue suficiente para que el clúster funcionase. En este apartado se recogen los problemas que aparecieron, cómo se diagnosticaron y cómo se resolvieron. Todos tienen un origen común: el enunciado está pensado para un entorno algo distinto del utilizado (otra versión de Java, otros nombres de usuario y nombres de fichero de versiones anteriores de Spark).
+
+\subsection{El master no arranca por la versión de Java}
+\label{sec:problema-java}
+
+\paragraph{Síntoma.} Al ejecutar \texttt{start-all.sh}, el master se detiene nada más arrancar y el log muestra:
+\begin{lstlisting}
+failed to launch: nice -n 0 /opt/spark/bin/spark-class
+  org.apache.spark.deploy.master.Master --host 192.168.64.2 ...
+Caused by: java.lang.IllegalStateException:
+  java.lang.NoSuchMethodException: java.nio.DirectByteBuffer.<init>(long,int)
+  at org.apache.spark.unsafe.Platform.<clinit>(Platform.java:113)
+\end{lstlisting}
+
+\paragraph{Causa.} El enunciado instala Java con \texttt{sudo apt install default-jdk}, que en las distribuciones actuales instala una versión muy reciente (en este caso, Java 25). Spark 3.2.1 sólo es compatible con Java 8 y 11~\cite{spark-overview}. Para gestionar memoria fuera del \emph{heap}, Spark crea objetos \texttt{DirectByteBuffer} llamando por reflexión a un constructor interno de la JVM, \texttt{DirectByteBuffer(long, int)}. Ese constructor desapareció en versiones posteriores de Java, así que la llamada falla y el proceso termina.
+
+\paragraph{Solución.} Instalar el JDK 11 y hacer que Spark lo use:
+\begin{lstlisting}[language=bash]
+sudo apt install openjdk-11-jdk
+ls /usr/lib/jvm/          # comprobar la ruta exacta
+\end{lstlisting}
+A continuación se fija \texttt{JAVA\_HOME} en \texttt{\textasciitilde/.bashrc} y en \texttt{spark-env.sh} (con la ruta \texttt{java-11-openjdk-amd64} o \texttt{java-11-openjdk-arm64}, según la arquitectura). Opcionalmente, puede elegirse Java 11 como versión predeterminada del sistema con \texttt{sudo update-alternatives --config java}.
+
+Con Java 11 el log sigue mostrando un aviso \texttt{WARNING: An illegal reflective access operation has occurred}. Es el mismo acceso por reflexión que en Java 11 aún se permite, y puede ignorarse.
+
+\subsection{El worker no se registra en el master}
+\label{sec:problema-worker}
+
+\paragraph{Síntoma.} Resuelto lo anterior, el master arranca correctamente (\texttt{jps} muestra \texttt{Master} y la interfaz web está disponible), pero la tabla de workers aparece vacía. En el worker, \texttt{jps} no muestra ningún proceso \texttt{Worker} y ni siquiera existe el directorio \texttt{/opt/spark/logs}.
+
+\paragraph{Diagnóstico.} La ausencia de logs en el worker es la pista clave: el proceso no ha llegado a lanzarse, así que el fallo no está en la red entre worker y master, sino en el paso previo, en el que el master entra por SSH en el worker para arrancarlo. Revisando ese paso se encontraron tres problemas, que fallaban a la vez:
+
+\begin{enumerate}
+  \item \textbf{Nombre del fichero de workers.} El enunciado pide escribir la lista de workers en \texttt{conf/slaves}, que es el nombre usado en versiones anteriores de Spark. En Spark 3.2.1 el script \texttt{start-workers.sh} lee \texttt{conf/workers}~\cite{spark-standalone}. Además, la IP escrita en el fichero tenía una errata (\texttt{192.168.4.4} en lugar de \texttt{192.168.64.4}), así que aunque se hubiera leído, el master habría intentado arrancar el worker en una máquina inexistente.
+
+  \item \textbf{Usuarios distintos en master y worker.} Los scripts se conectan con \texttt{ssh IP\_WORKER}, es decir, con el mismo nombre de usuario que los ejecuta en el master (\texttt{master}). En el worker ese usuario no existe: el usuario es \texttt{slave}.
+
+  \item \textbf{Versión de Java en el worker.} \texttt{JAVA\_HOME} sólo estaba definida en \texttt{\textasciitilde/.bashrc}. El master funcionaba porque se arranca desde una terminal interactiva, que sí lee ese fichero. Sin embargo, el worker se lanza por SSH en una shell \emph{no interactiva}, y el \texttt{.bashrc} de Ubuntu termina inmediatamente en ese caso, sin llegar a las líneas añadidas. El worker habría arrancado con el Java por defecto del sistema (el 25) y habría fallado igual que el master en el apartado~\ref{sec:problema-java}.
+\end{enumerate}
+
+\paragraph{Solución.} Cada problema se corrige por separado:
+\begin{enumerate}
+  \item En el master, crear \texttt{conf/workers} con la IP correcta del worker:
+\begin{lstlisting}[language=bash]
+echo 192.168.64.4 > /opt/spark/conf/workers
+\end{lstlisting}
+  \item En el master, indicar a SSH qué usuario usar en el worker, en \texttt{\textasciitilde/.ssh/config}:
+\begin{lstlisting}
+Host 192.168.64.4
+  User slave
+\end{lstlisting}
+  Se comprueba con \texttt{ssh 192.168.64.4} (sin usuario), que debe entrar en el worker sin pedir contraseña.
+  \item En los dos nodos, añadir \texttt{JAVA\_HOME} a \texttt{spark-env.sh}, que los scripts de Spark leen siempre, sea cual sea el tipo de shell:
+\begin{lstlisting}[language=bash]
+export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
+\end{lstlisting}
+\end{enumerate}
+
+Tras reiniciar el clúster con \texttt{stop-all.sh} y \texttt{start-all.sh}, el log del worker muestra \texttt{Successfully registered with master spark://192.168.64.2:7077} y el worker aparece en la interfaz web con estado \texttt{ALIVE}.
+
+\begin{concepto}{Cómo diagnosticar un worker que no aparece}
+Lo más rápido es comprobar en el worker si existe \texttt{/opt/spark/logs}. Si no existe, el proceso no llegó a lanzarse: hay que revisar el fichero \texttt{workers} y el SSH desde el master (\texttt{ssh IP\_WORKER} debe entrar sin contraseña). Si existe, el log \texttt{spark-*-Worker-*.out} indica si arrancó y si logró conectar con el master. Si no conecta, el problema está en la red o en la dirección en la que escucha el master (\texttt{SPARK\_MASTER\_HOST}, puerto 7077).
+\end{concepto}
 
 % ======================= CONCLUSIONES =======================
 \section{Conclusiones}

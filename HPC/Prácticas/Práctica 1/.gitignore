@@ -6,3 +6,4 @@ memoria/*.fls
 memoria/*.fdb_latexmk
 memoria/*.bbl
 memoria/*.blg
+memoria/*.synctex.gz
