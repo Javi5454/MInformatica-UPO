@@ -1,2 +1,60 @@
-# macOS
+# Sistema operativo
 .DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# Editores e IDEs
+.vscode/
+.idea/
+*.swp
+*~
+~$*
+.claude/settings.local.json
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+
+# LaTeX: ficheros auxiliares (los .pdf, .bib y .bst se versionan)
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.dvi
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex
+*.synctex.gz
+*.synctex(busy)
+*.toc
+*.vrb
+*.xdv
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Java / Scala
+*.class
+target/
+.gradle/
+.bsp/
+
+# Spark / Hadoop
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc

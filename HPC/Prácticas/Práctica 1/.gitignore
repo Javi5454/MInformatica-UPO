@@ -1,9 +1,0 @@
-memoria/*.aux
-memoria/*.log
-memoria/*.toc
-memoria/*.out
-memoria/*.fls
-memoria/*.fdb_latexmk
-memoria/*.bbl
-memoria/*.blg
-memoria/*.synctex.gz
