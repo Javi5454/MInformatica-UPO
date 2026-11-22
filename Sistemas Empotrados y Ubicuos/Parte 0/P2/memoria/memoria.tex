@@ -1,0 +1,655 @@
+% =====================================================================
+%  Práctica 2 - Sistema extendido de monitorización y control de temperatura
+%  Sistemas Empotrados y Ubicuos - Grupo 4
+%
+%  Compilar: pdflatex -> pdflatex   (o: latexmk -pdf memoria.tex)
+% =====================================================================
+\documentclass{upo-master}
+
+% ---------- Datos del documento ----------
+\asignatura{Sistemas Empotrados y Ubicuos}
+\tipodocumento{Práctica 2}
+\title{Sistema extendido de monitorización y control de temperatura}
+\subtitulo{Simulación en Proteus con Arduino (ATmega328P)}
+\author{\texorpdfstring{\begin{tabular}[t]{@{}l@{}}Javier Gómez\\Daniel Jurado\\Manuel Ramos\end{tabular}}%
+                       {Javier Gómez, Daniel Jurado, Manuel Ramos}}
+\grupo{Grupo 4}
+\tituloCorto{P2 - Control de temperatura}
+
+% Estilo para el código Arduino (C++)
+\lstdefinestyle{arduino}{language=C++, numbers=left,
+  morekeywords={uint8_t, byte, boolean, HIGH, LOW, OUTPUT, INPUT},
+  % Mismos acentos que la clase + el símbolo de grado (º) de los comentarios
+  literate={á}{{\'a}}1 {é}{{\'e}}1 {í}{{\'i}}1 {ó}{{\'o}}1 {ú}{{\'u}}1
+           {Á}{{\'A}}1 {É}{{\'E}}1 {Í}{{\'I}}1 {Ó}{{\'O}}1 {Ú}{{\'U}}1
+           {ñ}{{\~n}}1 {Ñ}{{\~N}}1 {ü}{{\"u}}1 {¿}{{?`}}1 {¡}{{!`}}1
+           {º}{{\textdegree}}1 {°}{{\textdegree}}1}
+
+% ---------- Uso de IA ----------
+\herramientaIA{Claude (Anthropic)}{Claude Opus 5.5}{Apoyo en el diseño del conexionado del motor y del servo, en el código de las cuestiones C1 a C4 y en la redacción de la memoria.}
+\usoIA{La IA se ha usado como apoyo para traducir el montaje real del enunciado
+a un esquema de Proteus, revisar las capturas del circuito, escribir los
+\emph{sketches} de C1 a C4 y redactar esta memoria. El montaje en Proteus y la
+simulación los ha hecho el grupo, que ha revisado el código y el texto.}
+
+% ---------- Declaración de uso de IA en plural (trabajo en grupo) ----------
+% La clase la redacta para un único autor; se redefine aquí para los tres
+% miembros del grupo, sin modificar la plantilla.
+\makeatletter
+\renewcommand{\declaracionIA}{%
+  \ifupo@iadeclarada\else
+  \global\upo@iadeclaradatrue
+  \clearpage
+  \phantomsection
+  \section*{Declaración de uso de inteligencia artificial}
+  \addcontentsline{toc}{section}{Declaración de uso de inteligencia artificial}
+  En la elaboración de este trabajo se han utilizado las siguientes
+  herramientas de inteligencia artificial generativa:
+
+  \begin{center}
+  \small
+  \begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{0.2\textwidth}
+                               >{\raggedright\arraybackslash}p{0.2\textwidth}
+                               >{\raggedright\arraybackslash}X}
+    \toprule
+    \rowcolor{upoazul!12}\textbf{Herramienta} & \textbf{Modelo / versión} & \textbf{Finalidad} \\
+    \midrule
+    \upo@iafilas
+    \bottomrule
+  \end{tabularx}
+  \end{center}
+
+  \ifx\upo@iatexto\@empty\else\upo@iatexto\par\fi
+
+  La IA se ha utilizado como herramienta de apoyo. Todo el contenido
+  generado con su ayuda ha sido revisado, contrastado y validado por los
+  autores, y los resultados experimentales, capturas, datos y código
+  ejecutado corresponden al trabajo realizado por el propio grupo.
+
+  \begin{tcolorbox}[colback=upoazul!5, colframe=upoazul, boxrule=0.6pt,
+      arc=2pt, fonttitle=\bfseries, title={Declaración de responsabilidad}]
+    Nosotros, \textbf{Javier Gómez}, \textbf{Daniel Jurado} y
+    \textbf{Manuel Ramos}, integrantes del \upo@grupo{} de la asignatura
+    \upo@asignatura, declaramos que este documento es fruto de nuestro
+    trabajo, que hemos indicado de forma veraz y completa el uso que hemos
+    hecho de herramientas de inteligencia artificial y que hemos citado
+    debidamente todas las fuentes consultadas. Asumimos la \textbf{plena
+    responsabilidad} sobre su contenido ---exactitud técnica, corrección del
+    código y de los resultados, idoneidad de las fuentes y originalidad--- y
+    sobre el cumplimiento de la normativa académica de la \upoUniversidad.
+
+    \vspace{0.8em}
+    \upo@fecha \hfill
+    \begin{tabular}[t]{@{}l@{}}Firmado: Javier Gómez\\
+      \phantom{Firmado: }Daniel Jurado\\
+      \phantom{Firmado: }Manuel Ramos\end{tabular}
+  \end{tcolorbox}
+  \fi}
+\makeatother
+
+\begin{document}
+
+\maketitle
+
+% Pie de página: el grupo en lugar de los tres nombres apilados
+\fancyfoot[L]{\small\color{upogris}Grupo 4 --- Gómez, Jurado, Ramos}
+
+% ======================= INTRODUCCIÓN =======================
+\section{Introducción}
+
+En esta práctica se amplía el sistema de monitorización de temperatura de la
+Práctica~1 para que, además de medir, pueda \emph{actuar} sobre la temperatura
+de la sala. Para ello se incorporan dos actuadores: un motor de corriente
+continua, que hace de ventilador, y un servomotor, que señaliza la acción de
+control. Todo el montaje se realiza en el entorno de simulación Proteus a
+partir del montaje real descrito en el enunciado.
+
+% ======================= C1 =======================
+\section{C1: Sistema actuador ``motor''}
+
+\begin{enunciado}
+Implementar en Proteus el sistema actuador motor y una secuencia de pruebas
+que compruebe sus dos modos de funcionamiento:
+\begin{itemize}
+  \item \textbf{Activar (velocidad máxima) / Desactivar}: 2\,s apagado,
+        2\,s al 100\,\%, 2\,s apagado.
+  \item \textbf{Activar (punto de trabajo) / Desactivar}: 2\,s apagado,
+        2\,s al 25\,\%, 2\,s al 50\,\%, 2\,s al 100\,\%, 2\,s apagado.
+\end{itemize}
+\end{enunciado}
+
+\subsection{Montaje}
+
+El Arduino no puede suministrar la corriente que necesita el motor, por lo que
+se usa un transistor como interruptor y una batería de 9\,V independiente.
+Los componentes añadidos respecto a la Práctica~1 son los de la
+Tabla~\ref{tab:componentes}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Componentes del sistema actuador motor en Proteus.}
+  \label{tab:componentes}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Componente} & \textbf{Dispositivo Proteus} & \textbf{Configuración} \\
+    \midrule
+    Motor de corriente continua & \texttt{MOTOR}   & Tensión nominal 9\,V \\
+    MOSFET de canal N           & \texttt{2N7000}  & --- \\
+    Diodo de protección         & \texttt{DIODE}   & --- \\
+    Batería                     & Generador DC     & 9\,V \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Las conexiones son las siguientes:
+\begin{itemize}
+  \item \textbf{Puerta (G)} del MOSFET al pin digital \textbf{5} del Arduino
+        (\texttt{IO5}, PD5/OC0B).
+  \item \textbf{Drenador (D)} al terminal negativo del motor y al ánodo del diodo.
+  \item \textbf{Fuente (S)} a tierra, común con la del Arduino.
+  \item \textbf{+9\,V} al terminal positivo del motor y al cátodo del diodo.
+\end{itemize}
+
+\begin{concepto}{MOSFET como interruptor}
+El 2N7000 es un MOSFET de canal N colocado entre el motor y tierra
+(\emph{low-side switch}). Cuando el pin del Arduino pone 5\,V en la puerta,
+el transistor conduce entre D y S y circula corriente desde la batería a
+través del motor. Con 0\,V en la puerta, el circuito queda abierto y el motor
+se detiene. Como la puerta está aislada, el Arduino solo aporta tensión, no
+corriente.
+\end{concepto}
+
+\begin{concepto}{Diodo de protección (\emph{flyback})}
+El motor es una carga inductiva: al cortar su corriente de golpe genera un
+pico de tensión que podría dañar el MOSFET. El diodo, colocado en paralelo con
+el motor y polarizado en inverso, no conduce en funcionamiento normal; al
+apagarse el transistor ofrece un camino para que la corriente de la bobina se
+descargue, limitando la tensión del drenador a unos 0,7\,V por encima de la
+alimentación.
+\end{concepto}
+
+\captura{c1-circuito.png}{Esquema del sistema actuador motor en Proteus.}
+
+\subsection{Control de la velocidad: PWM}
+
+El primer modo solo necesita encender o apagar el motor, así que basta con
+\texttt{digitalWrite()}. Para el segundo modo hay que fijar una velocidad
+intermedia. Como el ATmega328P no tiene salida analógica real,
+\texttt{analogWrite()} genera una señal \textbf{PWM}: una onda cuadrada de
+0--5\,V cuyo ciclo de trabajo es proporcional al valor escrito (0--255). El
+motor responde a la tensión media, de modo que gira más rápido cuanto mayor es
+el valor.
+
+Solo los pines conectados a una salida de comparación de un temporizador
+(\texttt{OCxx} en el símbolo del ATmega328P) pueden generar PWM: los
+pines 3, 5, 6, 9, 10 y 11. Se eligió el \textbf{pin 5} (OC0B, Timer0) porque
+está libre y porque el Timer1 (pines 9 y 10) lo usará la librería
+\texttt{Servo} en la cuestión C2.
+
+Para pasar del porcentaje de velocidad al valor PWM se redondea al entero más
+cercano, de forma que el 25\,\%, 50\,\% y 100\,\% corresponden a 64, 128 y 255:
+
+\begin{lstlisting}[style=arduino, caption={Conversión de porcentaje a valor PWM.}]
+uint8_t porcentajeAPwm(uint8_t porcentaje)
+{
+  if (porcentaje > 100)
+  {
+    porcentaje = 100;
+  }
+  return (uint8_t)((porcentaje * (unsigned int)PWM_MAX + 50) / 100); // Se suma 50 para redondear
+}
+\end{lstlisting}
+
+\subsection{Secuencia de pruebas}
+
+El programa ejecuta en bucle las dos secuencias del enunciado, cada paso
+durante 2\,s, y escribe cada cambio de estado por el puerto serie. El código
+completo se incluye en el Anexo~\ref{anexo:c1}.
+
+\begin{lstlisting}[style=arduino, caption={Secuencias de prueba de los dos modos.}]
+void pruebaModoDigital()           // Modo 1: digitalWrite
+{
+  motorDigital(false); delay(DURACION_PASO_MS);
+  motorDigital(true);  delay(DURACION_PASO_MS);
+  motorDigital(false); delay(DURACION_PASO_MS);
+}
+
+void pruebaModoPwm()               // Modo 2: analogWrite (PWM)
+{
+  const uint8_t pasos[] = {0, 25, 50, 100, 0};
+  for (uint8_t i = 0; i < sizeof(pasos); i++)
+  {
+    motorVelocidad(pasos[i]);
+    delay(DURACION_PASO_MS);
+  }
+}
+
+void loop()
+{
+  pruebaModoDigital();   // 6 s
+  pruebaModoPwm();       // 10 s
+}
+\end{lstlisting}
+
+\subsection{Resultado}
+
+Al simular, el motor permanece parado, arranca a velocidad máxima y vuelve a
+pararse en el primer modo; en el segundo, va aumentando su velocidad en los
+escalones del 25\,\%, 50\,\% y 100\,\% antes de detenerse. La secuencia
+completa dura 16\,s y se repite indefinidamente.
+
+\begin{aviso}
+Con \texttt{analogWrite()} en un pin sin PWM (por ejemplo, una entrada
+analógica como A1) el Arduino no genera la señal: pone el pin a nivel bajo
+para valores menores que 128 y a nivel alto para el resto, por lo que el
+motor solo podría estar apagado o a máxima velocidad.
+\end{aviso}
+
+% ======================= C2 =======================
+\section{C2: Sistema actuador ``servo''}
+
+\begin{enunciado}
+Implementar en Proteus el sistema actuador servo y una secuencia de pruebas
+que lo lleve a los ángulos 0\textdegree, 45\textdegree, 90\textdegree,
+45\textdegree{} y 0\textdegree, manteniendo cada posición durante 2\,s.
+\end{enunciado}
+
+\subsection{Montaje}
+
+El servomotor se usará como indicador de la acción de control del ventilador:
+0\textdegree{} con el motor apagado y 90\textdegree{} con el motor a máxima
+velocidad. A diferencia del motor de C1, el servo tiene su propio circuito de
+control interno, por lo que se conecta directamente al Arduino con tres cables.
+Los componentes añadidos son los de la Tabla~\ref{tab:componentes-servo}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Componentes del sistema actuador servo en Proteus.}
+  \label{tab:componentes-servo}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Componente} & \textbf{Dispositivo Proteus} & \textbf{Configuración} \\
+    \midrule
+    Servomotor              & \texttt{MOTOR-PWMSERVO} & 0\textdegree--180\textdegree, pulsos de 544--2400\,\textmu s \\
+    Condensador de desacoplo & \texttt{CAP-POL}       & 100\,\textmu F (\texttt{100uF}) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Las propiedades del servo se configuran como indica el enunciado
+(\emph{Minimum Angle} 0, \emph{Maximum Angle} +180, \emph{Rotational Speed} 50,
+\emph{Minimum Control Pulse} 544u y \emph{Maximum Control Pulse} 2400u) para
+que su comportamiento sea realista. Las conexiones son:
+\begin{itemize}
+  \item \textbf{Control} del servo al pin digital \textbf{9} del Arduino
+        (\texttt{IO9}, PB1/OC1A).
+  \item \textbf{Alimentación (+)} a los \textbf{5\,V} del Arduino, no a la
+        batería de 9\,V del motor.
+  \item \textbf{Tierra (--)} a GND.
+  \item \textbf{Condensador de 100\,\textmu F} en paralelo con la alimentación
+        del servo: terminal positivo a 5\,V y negativo a GND.
+\end{itemize}
+
+\begin{concepto}{Condensador de desacoplo}
+Cuando el servo empieza a moverse pide un pico de corriente que podría hacer
+caer la tensión de alimentación del Arduino. El condensador, colocado junto al
+servo, actúa como una pequeña reserva de carga que suministra ese pico y
+aísla al resto del circuito de él. Es electrolítico, por lo que tiene
+polaridad: el terminal negativo debe ir siempre a tierra.
+\end{concepto}
+
+\captura{c2-circuito.png}{Esquema del sistema actuador servo en Proteus.}
+
+\subsection{Control de la posición}
+
+El servo no se controla por el nivel de tensión, sino por la \textbf{duración
+de un pulso} que se repite cada 20\,ms: un pulso de 544\,\textmu s lo lleva a
+0\textdegree{} y uno de 2400\,\textmu s a 180\textdegree. Su circuito interno
+compara la posición del eje, medida con un potenciómetro, con la que indica el
+pulso, y mueve el motor hasta que coinciden.
+
+De generar estos pulsos se encarga la librería \texttt{Servo}: basta con
+asociar el objeto al pin con \texttt{attach()} e indicar el ángulo con
+\texttt{write()}. La librería usa el \textbf{Timer1}, lo que desactiva el PWM
+de \texttt{analogWrite()} en los pines 9 y 10. Por eso el servo va en el pin 9
+y el motor de C1 se dejó en el pin 5, que depende del Timer0, de forma que
+ambos actuadores pueden funcionar a la vez en las siguientes cuestiones.
+
+\subsection{Secuencia de pruebas}
+
+El programa recorre en bucle la lista de ángulos del enunciado, manteniendo
+cada uno 2\,s e informando por el puerto serie. El motor de C1 se deja apagado
+durante la prueba. El código completo se incluye en el Anexo~\ref{anexo:c2}.
+
+\begin{lstlisting}[style=arduino, caption={Configuración del servo y secuencia de prueba.}]
+#include <Servo.h>
+
+Servo servo;
+const uint8_t PIN_SERVO = 9;
+
+void setup()
+{
+  servo.attach(PIN_SERVO);   // Asocia el objeto al pin del servo
+  servo.write(0);            // Posición inicial
+}
+
+void pruebaServo()
+{
+  const uint8_t angulos[] = {0, 45, 90, 45, 0};
+  for (uint8_t i = 0; i < sizeof(angulos); i++)
+  {
+    moverServo(angulos[i]);  // servo.write() + mensaje por el serie
+    delay(DURACION_PASO_MS);
+  }
+}
+\end{lstlisting}
+
+\subsection{Resultado}
+
+Al simular, el servo parte de 0\textdegree, gira a 45\textdegree{} y a
+90\textdegree, y vuelve a 45\textdegree{} y a 0\textdegree, permaneciendo 2\,s
+en cada posición. El giro entre posiciones no es instantáneo, ya que depende
+de la velocidad de rotación configurada en el componente. La secuencia dura
+10\,s y se repite indefinidamente.
+
+\subsection{Problema encontrado: rango del servo}
+
+En la primera simulación el servo no alcanzaba los ángulos pedidos: al
+ordenar 0\textdegree, 45\textdegree{} y 90\textdegree{} se colocaba en
+$-90$\textdegree, $-88{,}5$\textdegree{} y $-5$\textdegree. El código era
+correcto; el problema estaba en que el componente \texttt{MOTOR-PWMSERVO}
+conservaba sus propiedades por defecto, con un rango distinto al que usa la
+librería \texttt{Servo} (Tabla~\ref{tab:rango-servo}).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Rango de la librería \texttt{Servo} y rango por defecto del servo de Proteus.}
+  \label{tab:rango-servo}
+  \begin{tabular}{lcc}
+    \toprule
+    & \textbf{Librería \texttt{Servo}} & \textbf{Proteus (por defecto)} \\
+    \midrule
+    Ángulos       & 0\textdegree{} a 180\textdegree & $-90$\textdegree{} a $+90$\textdegree \\
+    Pulsos        & 544 a 2400\,\textmu s           & 1000 a 2000\,\textmu s \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+La librería traduce 0\textdegree, 45\textdegree{} y 90\textdegree{} en pulsos
+de 544, 1008 y 1472\,\textmu s. El servo, con su rango por defecto,
+interpretaba esos pulsos de otra forma:
+\begin{itemize}
+  \item \textbf{544\,\textmu s} queda por debajo de su mínimo de 1000\,\textmu s,
+        así que se quedaba en el tope de $-90$\textdegree.
+  \item \textbf{1008\,\textmu s} está apenas por encima del mínimo, lo que
+        corresponde a $-88{,}5$\textdegree.
+  \item \textbf{1472\,\textmu s} está cerca de la mitad del rango, lo que
+        corresponde a unos $-5$\textdegree.
+\end{itemize}
+
+La solución fue configurar el componente con los parámetros del enunciado
+(ángulo de 0 a +180, pulsos de \texttt{544u} a \texttt{2400u}), de modo que
+librería y servo usen el mismo rango. Tras el cambio, el servo se coloca
+correctamente en cada posición.
+
+\begin{aviso}
+En las propiedades de Proteus hay que escribir la unidad \texttt{u}
+(\emph{micro}) en los pulsos: \texttt{544u} y \texttt{2400u}. Sin ella, los
+valores se interpretan en segundos.
+\end{aviso}
+
+% ======================= C3 =======================
+\section{C3: Sistema de monitorización y control de temperatura (base)}
+
+\begin{enunciado}
+Extender el sistema de monitorización de temperatura de la Práctica~1 con
+los actuadores de C1 y C2:
+\begin{itemize}
+  \item Si la temperatura es \textbf{menor que el umbral} y no se pulsa el
+        botón, el motor permanece desactivado y el servo en 0\textdegree{}
+        (enfriamiento parado).
+  \item Si la temperatura es \textbf{mayor o igual que el umbral}, o se pulsa
+        el botón, el motor se activa al 100\,\% y el servo se coloca en
+        90\textdegree{} (enfriamiento en marcha).
+\end{itemize}
+\end{enunciado}
+
+\subsection{Montaje}
+
+No se añade ningún componente nuevo: el circuito reúne en un mismo esquema
+el termómetro de la Práctica~1 y los dos actuadores de C1 y C2
+(Tabla~\ref{tab:pines-c3}).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Asignación de pines del sistema completo.}
+  \label{tab:pines-c3}
+  \begin{tabular}{lll}
+    \toprule
+    \textbf{Elemento} & \textbf{Pin} & \textbf{Función} \\
+    \midrule
+    Sensor LM35   & A0 & Entrada analógica (temperatura) \\
+    Pulsador      & 4  & Entrada digital (forzar enfriamiento) \\
+    LED rojo      & 3  & Enfriamiento en marcha \\
+    LED verde     & 2  & Enfriamiento parado \\
+    Motor (MOSFET)& 5  & Salida PWM (Timer0) \\
+    Servo         & 9  & Pulsos de la librería \texttt{Servo} (Timer1) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\captura{c3-circuito.png}{Esquema completo del sistema de monitorización y control en Proteus.}
+
+\subsection{Lógica de control}
+
+El programa parte del código de la Práctica~1, que ya leía el LM35 cada
+segundo sin bloquear el bucle (comprobando \texttt{millis()} en lugar de usar
+\texttt{delay()}) y atendía el pulsador en cada vuelta. Sobre esa base se
+añade una única función, \texttt{aplicarEnfriamiento()}, que actúa a la vez
+sobre los tres indicadores del estado del sistema:
+
+\begin{lstlisting}[style=arduino, caption={Activación y desactivación del sistema de enfriamiento.}]
+void aplicarEnfriamiento(bool activo)
+{
+  if (activo)
+  {
+    analogWrite(PIN_MOTOR, PWM_MOTOR_MAX);   // Motor al 100 %
+    servo.write(ANGULO_MARCHA);              // Servo a 90º
+    encenderLeds(true, false);               // LED rojo
+  }
+  else
+  {
+    analogWrite(PIN_MOTOR, 0);               // Motor parado
+    servo.write(ANGULO_PARADO);              // Servo a 0º
+    encenderLeds(false, true);               // LED verde
+  }
+}
+\end{lstlisting}
+
+En cada vuelta del bucle se decide si hay que enfriar (temperatura alta
+\emph{o} botón pulsado) y solo se llama a esa función cuando la decisión
+cambia, para no reenviar la misma orden a los actuadores continuamente:
+
+\begin{lstlisting}[style=arduino, caption={Decisión de control en \texttt{loop()}.}]
+bool botonPulsado = (digitalRead(PIN_BOTON) == HIGH);
+bool debeEnfriar  = botonPulsado || temperaturaAlta;
+
+if (debeEnfriar != enfriando)
+{
+  enfriando = debeEnfriar;
+  aplicarEnfriamiento(enfriando);
+}
+\end{lstlisting}
+
+El código completo se incluye en el Anexo~\ref{anexo:c3}.
+
+\begin{nota}[Histéresis]
+Como en la Práctica~1, la comparación con el umbral (24\,\textdegree C) usa
+una histéresis de 0,5\,\textdegree C: el enfriamiento se activa al llegar a
+24\,\textdegree C, pero no se desactiva hasta bajar de 23,5\,\textdegree C.
+Con un control todo/nada esto es aún más importante que con los LEDs: si la
+temperatura oscila justo en el umbral, sin histéresis el motor y el servo se
+encenderían y apagarían continuamente. Si se quiere el comportamiento estricto
+del enunciado basta con poner \texttt{HISTERESIS = 0}.
+\end{nota}
+
+\subsection{Resultado y comportamiento esperado}
+
+En la simulación se modifica la temperatura del LM35 con sus flechas y se
+comprueba que, al alcanzar el umbral, el motor arranca a máxima velocidad, el
+servo gira a 90\textdegree{} y se enciende el LED rojo; al bajar de nuevo, todo
+vuelve al estado de reposo. Mientras se mantiene pulsado el botón, el
+enfriamiento se activa con independencia de la temperatura.
+
+Como indica el enunciado, Proteus no dispone de un modelo térmico de la
+sala, así que no puede verse el efecto del ventilador sobre la temperatura.
+En un montaje real cabría esperar un comportamiento \textbf{todo/nada}: el
+ventilador arrancaría a plena potencia al superar el umbral, la temperatura
+bajaría hasta salir de la banda de histéresis, el ventilador se pararía y la
+temperatura volvería a subir. El resultado sería una oscilación continua en
+torno al umbral, con el motor alternando entre parado y máxima velocidad
+aunque la diferencia de temperatura sea mínima. Esta limitación es la que
+motiva el control proporcional de la cuestión C4.
+
+% ======================= C4 =======================
+\clearpage
+\section{C4: Sistema de monitorización y control de temperatura (avanzado)}
+
+\begin{enunciado}
+Modificar C3 para que la acción de control (la velocidad del motor) sea
+\textbf{proporcional a la diferencia} entre la temperatura real y la
+temperatura umbral, probando las constantes de proporcionalidad 20, 50
+y 100. El ángulo del servo debe señalizar el porcentaje de la velocidad
+máxima, haciendo corresponder 0--100\,\% con 0--90\textdegree.
+\end{enunciado}
+
+\subsection{Ley de control}
+
+El montaje es el mismo que en C3; solo cambia el programa. En lugar de
+encender o apagar el motor, la velocidad se calcula a partir del
+\textbf{error}, la diferencia entre la temperatura medida $T$ y el umbral
+$T_u = 24$\,\textdegree C:
+\begin{equation}
+  u = K_p \,(T - T_u), \qquad
+  \text{velocidad (\%)} = \min\bigl(\max(u,\,0),\,100\bigr)
+\end{equation}
+
+La acción se \textbf{satura} al rango físico del motor: por debajo del umbral
+el error es negativo y el motor queda parado, y por encima de
+$100/K_p$\,\textdegree C de diferencia el motor ya va al 100\,\%. Ese
+porcentaje se traduce a los actuadores con dos conversiones lineales
+redondeadas: al valor PWM (0--255), como en C1, y al ángulo del servo
+(0--90\textdegree). El pulsador, como en C3, fuerza el 100\,\% mientras se
+mantiene pulsado.
+
+\begin{lstlisting}[style=arduino, caption={Cálculo de la acción de control proporcional.}]
+const float UMBRAL = 24.0;
+const float KP     = 20.0;   // Probar con 20, 50 y 100
+
+uint8_t calcularAccionControl(float temperatura)
+{
+  float error  = temperatura - UMBRAL;   // > 0 si hace más calor del deseado
+  float accion = KP * error;             // Acción proporcional al error
+
+  if (accion <= 0.0)   return 0;         // Por debajo del umbral: no enfriar
+  if (accion >= 100.0) return 100;       // Saturación: velocidad máxima
+  return (uint8_t)(accion + 0.5);        // Redondeo al entero más cercano
+}
+
+void aplicarEnfriamiento(uint8_t porcentaje)
+{
+  analogWrite(PIN_MOTOR, porcentajeAPwm(porcentaje));      // 0..255
+  servo.write(porcentajeAAngulo(porcentaje));              // 0..90º
+  encenderLeds(porcentaje > 0, porcentaje == 0);
+}
+\end{lstlisting}
+
+A diferencia de C3, aquí no se usa histéresis: el control ya es continuo, de
+modo que cerca del umbral el motor gira despacio en lugar de conmutar entre
+parado y máxima velocidad. El código completo se incluye en el
+Anexo~\ref{anexo:c4}.
+
+\subsection{Resultados con cada constante}
+
+La Tabla~\ref{tab:kp} recoge la acción de control teórica para varias
+temperaturas con cada valor de $K_p$, y el ángulo correspondiente del servo.
+En la simulación los valores pueden diferir ligeramente por la resolución del
+ADC (unos 0,49\,\textdegree C por paso).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Velocidad del motor (\%) y ángulo del servo según $K_p$ (umbral 24\,\textdegree C).}
+  \label{tab:kp}
+  \begin{tabular}{ccccc}
+    \toprule
+    \textbf{Temperatura} & \textbf{Error} & $\mathbf{K_p = 20}$ & $\mathbf{K_p = 50}$ & $\mathbf{K_p = 100}$ \\
+    \midrule
+    23\,\textdegree C & $-1$ & 0\,\% \;(0\textdegree)   & 0\,\% \;(0\textdegree)   & 0\,\% \;(0\textdegree) \\
+    24\,\textdegree C & 0    & 0\,\% \;(0\textdegree)   & 0\,\% \;(0\textdegree)   & 0\,\% \;(0\textdegree) \\
+    25\,\textdegree C & 1    & 20\,\% \;(18\textdegree) & 50\,\% \;(45\textdegree) & 100\,\% \;(90\textdegree) \\
+    26\,\textdegree C & 2    & 40\,\% \;(36\textdegree) & 100\,\% \;(90\textdegree) & 100\,\% \;(90\textdegree) \\
+    27\,\textdegree C & 3    & 60\,\% \;(54\textdegree) & 100\,\% \;(90\textdegree) & 100\,\% \;(90\textdegree) \\
+    28\,\textdegree C & 4    & 80\,\% \;(72\textdegree) & 100\,\% \;(90\textdegree) & 100\,\% \;(90\textdegree) \\
+    29\,\textdegree C & 5    & 100\,\% \;(90\textdegree) & 100\,\% \;(90\textdegree) & 100\,\% \;(90\textdegree) \\
+    \midrule
+    \multicolumn{2}{l}{\textbf{Saturación a partir de}} & $+5$\,\textdegree C & $+2$\,\textdegree C & $+1$\,\textdegree C \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\captura{c4-simulacion.png}{Simulación del control proporcional en Proteus.}
+
+\subsection{Análisis de las constantes de proporcionalidad}
+
+Igual que en C3, Proteus no permite ver el efecto real del ventilador sobre
+la temperatura, pero sí razonar el comportamiento esperado:
+
+\begin{itemize}
+  \item \textbf{$K_p = 20$ (acción suave).} El motor recorre todo su rango a lo
+        largo de 5\,\textdegree C, así que la velocidad se ajusta
+        gradualmente y sin cambios bruscos, con menos ruido y consumo. Su
+        inconveniente es una respuesta lenta y un \textbf{error permanente}
+        mayor: un control proporcional solo actúa si hay error, de modo que
+        la sala se estabilizaría por encima del umbral, en el punto en que la
+        velocidad del ventilador compense el calor que entra. Además, a
+        pocas décimas del umbral el motor recibe un PWM bajo con el que un
+        motor real podría no llegar a arrancar (zona muerta).
+  \item \textbf{$K_p = 50$ (compromiso).} Satura a 2\,\textdegree C de
+        diferencia: reacciona con más fuerza y reduce el error permanente,
+        manteniendo todavía un tramo proporcional útil.
+  \item \textbf{$K_p = 100$ (acción agresiva).} Satura con solo
+        1\,\textdegree C de error, por lo que el sistema se parece mucho al
+        todo/nada de C3: reacción rápida y error permanente pequeño, pero con
+        tendencia a oscilar y a forzar el motor. Además, cada paso del ADC
+        (unos 0,49\,\textdegree C) cambia la acción en unos 49 puntos, así que
+        el ruido de la medida se traduce en saltos grandes de velocidad.
+\end{itemize}
+
+En resumen, cuanto mayor es $K_p$, más rápida es la respuesta y menor el error
+en régimen permanente, a costa de una actuación más brusca y más sensible al
+ruido; cuanto menor es, más suave y estable es el control, pero más se aleja
+la temperatura final del umbral. Para un ventilador doméstico, $K_p = 50$
+parece el mejor equilibrio entre las tres.
+
+% ======================= USO DE IA =======================
+\declaracionIA
+
+% ======================= ANEXO =======================
+\appendix
+\section{Código completo de C1}\label{anexo:c1}
+
+\lstinputlisting[style=arduino, caption={\texttt{C1\_motor.ino}}]{../C1_motor.ino}
+
+\section{Código completo de C2}\label{anexo:c2}
+
+\lstinputlisting[style=arduino, caption={\texttt{C2\_servo.ino}}]{../C2_servo.ino}
+
+\section{Código completo de C3}\label{anexo:c3}
+
+\lstinputlisting[style=arduino, caption={\texttt{C3\_control.ino}}]{../C3_control.ino}
+
+\section{Código completo de C4}\label{anexo:c4}
+
+\lstinputlisting[style=arduino, caption={\texttt{C4\_proporcional.ino}}]{../C4_proporcional.ino}
+
+\end{document}
