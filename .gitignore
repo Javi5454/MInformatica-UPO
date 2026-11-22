@@ -58,3 +58,10 @@ spark-warehouse/
 metastore_db/
 derby.log
 *.crc
+
+# Proteus: copias de seguridad automáticas y estado del espacio de trabajo
+Project Backups/
+*.pdsprj.*.workspace
+
+# Vídeos de las entregas (proyectos de edición y exportaciones; se entregan aparte)
+Sistemas Empotrados y Ubicuos/**/Video/
