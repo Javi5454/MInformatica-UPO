@@ -1,0 +1,150 @@
+% =====================================================================
+%  PLANTILLA: memoria de práctica / trabajo (portada completa + índice)
+%  Máster Universitario en Ingeniería Informática (IA) - UPO 2026/2027
+%
+%  Compilar: pdflatex -> bibtex -> pdflatex -> pdflatex
+%            (o simplemente: latexmk -pdf memoria.tex)
+%  Opciones de la clase: portada | cabecera | sinindice | twoside
+% =====================================================================
+\documentclass{upo-master}
+
+% ---------- Datos del documento ----------
+\asignatura{Nombre de la asignatura}
+\tipodocumento{Práctica 1}            % Práctica N, Actividad N, Memoria, Trabajo final...
+\title{Título de la práctica}
+\subtitulo{Subtítulo opcional}         % déjalo vacío o bórralo si no hace falta
+\author{Javier Gómez López}
+% \correo{usuario@alu.upo.es}
+% \profesor{Nombre del profesor}
+% \grupo{Grupo 1}
+% \tituloCorto{P1 - Título corto}       % texto de la cabecera derecha
+% \date{15 de diciembre de 2026}         % por defecto, la fecha de compilación
+% \rutaLogo{../../Plantilla LaTeX/img/logo-upo}  % si el logo no está en img/
+
+% ---------- Uso de IA (OBLIGATORIO revisarlo en cada entrega) ----------
+% Una línea por herramienta. Si no declaras ninguna, el documento
+% indicará que NO se ha usado IA generativa.
+\herramientaIA{Claude (Anthropic)}{Claude Opus 5.5}{Apoyo en la redacción y revisión de las explicaciones, estructura de la memoria y código \LaTeX.}
+% \herramientaIA{GitHub Copilot}{---}{Autocompletado de código.}
+\usoIA{Describe aquí con más detalle cómo se ha usado la IA: qué partes,
+qué se ha revisado y qué se ha hecho sin ella.}
+
+\begin{document}
+
+\maketitle
+
+% ======================= INTRODUCCIÓN =======================
+\section{Introducción y objetivos}
+
+Breve contexto del problema y de lo que se pide en el enunciado.
+
+\begin{enunciado}
+Resumen o cita textual del enunciado de la práctica.
+\end{enunciado}
+
+Los objetivos son:
+\begin{enumerate}
+  \item Primer objetivo.
+  \item Segundo objetivo.
+\end{enumerate}
+
+% ======================= FUNDAMENTOS =======================
+\section{Fundamentos teóricos}
+
+\begin{concepto}{Concepto clave}
+Definición breve del concepto principal que se usa en el trabajo.
+\end{concepto}
+
+\begin{definicion}
+Una definición formal numerada. Por ejemplo, el riesgo empírico de un
+modelo $f_{\vect{\theta}}$ sobre $n$ ejemplos es
+\begin{equation}
+  \hat{R}(\vect{\theta}) = \frac{1}{n}\sum_{i=1}^{n} \ell\bigl(f_{\vect{\theta}}(\vect{x}_i), y_i\bigr),
+  \qquad
+  \vect{\theta}^{*} = \argmin_{\vect{\theta}\in\R^d} \hat{R}(\vect{\theta}).
+\end{equation}
+\end{definicion}
+
+Las referencias se citan así~\cite{russell-norvig}.
+
+% ======================= DESARROLLO =======================
+\section{Desarrollo}
+
+\subsection{Entorno y herramientas}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Ejemplo de tabla.}
+  \label{tab:entorno}
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Componente} & \textbf{Versión} \\
+    \midrule
+    Python & 3.13 \\
+    scikit-learn & 1.6 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Implementación}
+
+\begin{lstlisting}[style=python, caption={Ejemplo de código Python.}, label={lst:ejemplo}]
+from sklearn.cluster import KMeans
+
+modelo = KMeans(n_clusters=3, random_state=0)
+etiquetas = modelo.fit_predict(X)  # asigna cada punto a un grupo
+\end{lstlisting}
+
+\begin{lstlisting}[style=bash]
+pip install -r requirements.txt
+python main.py --datos datos.csv
+\end{lstlisting}
+
+\begin{algorithm}[htbp]
+\caption{Ejemplo de pseudocódigo}\label{alg:ejemplo}
+\begin{algorithmic}[1]
+\Require conjunto de datos $D$, número de iteraciones $T$
+\Ensure modelo entrenado $\vect{\theta}$
+\State inicializar $\vect{\theta}$
+\For{$t = 1$ \textbf{hasta} $T$}
+  \State $\vect{\theta} \gets \vect{\theta} - \eta \nabla \hat{R}(\vect{\theta})$
+\EndFor
+\State \Return $\vect{\theta}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{aviso}
+Algo a tener en cuenta (un error típico, una limitación...).
+\end{aviso}
+
+% ======================= RESULTADOS =======================
+\section{Resultados}
+
+% Si img/resultado.png no existe aparece un recuadro con el nombre.
+\captura{resultado.png}{Ejemplo de captura o gráfica de resultados.}
+
+Como se ve en la Figura~\ref{fig:resultado.png} y la Tabla~\ref{tab:entorno}\ldots
+
+\begin{nota}
+Una observación sobre los resultados.
+\end{nota}
+
+% ======================= CONCLUSIONES =======================
+\section{Conclusiones}
+
+Ideas principales que deja el trabajo, problemas encontrados y posibles
+mejoras.
+
+% ======================= USO DE IA =======================
+% Se coloca aquí, antes de la bibliografía. Si la quitas, la clase la
+% añade igualmente al final del documento.
+\declaracionIA
+
+% ======================= REFERENCIAS =======================
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{Referencias}
+\bibliographystyle{unsrt-es}
+\bibliography{bibliografia}
+
+\end{document}

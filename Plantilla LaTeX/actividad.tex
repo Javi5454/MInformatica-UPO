@@ -1,0 +1,46 @@
+% =====================================================================
+%  PLANTILLA: actividad / cuestionario / entrega corta
+%  (cabecera compacta en lugar de portada, sin índice)
+%  Máster Universitario en Ingeniería Informática (IA) - UPO 2026/2027
+% =====================================================================
+\documentclass[cabecera,sinindice]{upo-master}
+
+\asignatura{Nombre de la asignatura}
+\tipodocumento{Actividad 1}
+\title{Título de la actividad}
+\author{Javier Gómez López}
+% \profesor{Nombre del profesor}
+% \rutaLogo{../../Plantilla LaTeX/img/logo-upo}
+
+% Uso de IA: una línea por herramienta (o ninguna si no se ha usado).
+\herramientaIA{Claude (Anthropic)}{Claude Opus 5.5}{Revisión de la redacción.}
+
+\begin{document}
+
+\maketitle
+
+\ejercicio[Título del ejercicio]
+\begin{enunciado}
+Texto de la pregunta tal y como aparece en el enunciado.
+\end{enunciado}
+\begin{respuesta}
+Respuesta razonada.
+\end{respuesta}
+
+\ejercicio
+\begin{enunciado}
+Segunda pregunta.
+\end{enunciado}
+\begin{respuesta}
+Respuesta. Si hay fórmulas: $\E[X] = \sum_x x\,P(X=x)$.
+\end{respuesta}
+
+% La declaración de uso de IA es obligatoria: aquí o, si se omite,
+% se añade sola al final.
+\declaracionIA
+
+% Si hay referencias, descomenta:
+% \bibliographystyle{unsrt-es}
+% \bibliography{bibliografia}
+
+\end{document}
